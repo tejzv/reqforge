@@ -213,11 +213,14 @@ function renderResult(data) {
     }
   }
   state.flatFiles = flat;
-  state.activeFileIdx = 0;
+  const preferredIdx = flat.findIndex(
+    (f) => f.path.endsWith("client.py") || f.path.endsWith("client.ts") || f.path.endsWith("client.mjs")
+  );
+  state.activeFileIdx = preferredIdx >= 0 ? preferredIdx : 0;
 
   const a = data.analysis;
   els.summaryStats.textContent =
-    `${a.total_ingested} ingested · ${a.kept_endpoints} endpoints · ${a.filtered_count} filtered · ${a.recommended_transport}`;
+    `${a.total_ingested} reqs · ${a.kept_endpoints} endpoints · ${a.filtered_count} filtered · ${a.recommended_transport}`;
 
   renderCodeTab();
   renderEndpointsTab();
@@ -583,4 +586,33 @@ els.rawInput.addEventListener("keydown", (e) => {
 
 els.btnForge.addEventListener("click", runForge);
 
-detectRuntime();
+detectRuntime().then(async () => {
+  const params = new URLSearchParams(window.location.search);
+  const demo = params.get("demo");
+  const target = params.get("target");
+  if (target && ["python", "typescript", "javascript", "all"].includes(target)) {
+    els.targetSelect.value = target;
+  }
+  if (demo === "har") {
+    state.sourceName = "sample.har";
+    els.rawInput.value = SAMPLE_HAR;
+    await runForge();
+  } else if (demo === "curl") {
+    state.sourceName = "sample.curl";
+    els.rawInput.value = SAMPLE_CURL;
+    await runForge();
+  }
+  const fileParam = params.get("file");
+  if (fileParam && state.flatFiles.length) {
+    const fIdx = state.flatFiles.findIndex((f) => f.path.endsWith(fileParam) || f.label === fileParam);
+    if (fIdx >= 0) {
+      state.activeFileIdx = fIdx;
+      renderCodeTab();
+    }
+  }
+  const tabParam = params.get("tab");
+  if (tabParam) {
+    const tabBtn = document.querySelector(`.tab-btn[data-tab="${tabParam}"]`);
+    if (tabBtn) tabBtn.click();
+  }
+});

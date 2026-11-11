@@ -105,7 +105,8 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 76vh;
+  height: calc(100vh - 96px);
+  min-height: 540px;
 }
 
 .panel-header {
@@ -206,6 +207,8 @@ textarea#raw-input.drag-over {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn:disabled {
@@ -238,6 +241,7 @@ textarea#raw-input.drag-over {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 8px 14px 0;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
@@ -246,6 +250,7 @@ textarea#raw-input.drag-over {
 .tabs-left {
   display: flex;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .tab-btn {
@@ -253,10 +258,11 @@ textarea#raw-input.drag-over {
   border: 0;
   border-bottom: 2px solid transparent;
   color: var(--muted);
-  padding: 8px 12px;
-  font-size: 12.5px;
+  padding: 8px 8px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .tab-btn.active {
@@ -265,9 +271,12 @@ textarea#raw-input.drag-over {
 }
 
 .summary-stats {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--muted);
   padding-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tab-pane {
