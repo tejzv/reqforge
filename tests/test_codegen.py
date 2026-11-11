@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -260,3 +261,99 @@ class TestCodegenAndExecution(unittest.TestCase):
         js_client = next(f.content for f in generated["javascript"] if f.path == "client.mjs")
         self.assertNotIn("WebKitFormBoundaryABC", js_client)
         self.assertIn("new FormData()", js_client)
+
+    def test_reserved_param_names_and_zero_pydantic_warnings(self) -> None:
+        har = json.dumps(
+            {
+                "log": {
+                    "entries": [
+                        {
+                            "_resourceType": "fetch",
+                            "request": {
+                                "method": "POST",
+                                "url": "https://api.demo.test/v1/proxy/42?options=1&params=2&url=3&headers=4&cookies=5&form=6&body=7",
+                                "headers": [
+                                    {"name": "Authorization", "value": "Bearer tok_1"},
+                                    {"name": "Content-Type", "value": "application/json"},
+                                ],
+                                "postData": {
+                                    "mimeType": "application/json",
+                                    "text": json.dumps({"schema": "v1", "json": True, "copy": "y", "dict": "z"}),
+                                },
+                            },
+                            "response": {
+                                "status": 200,
+                                "content": {
+                                    "mimeType": "application/json",
+                                    "text": json.dumps({"model_config": "ok", "validate": True}),
+                                },
+                            },
+                        }
+                    ]
+                }
+            }
+        )
+        _, generated = run_pipeline(
+            har,
+            source_name="reserved.har",
+            options=ForgeOptions(target="all", client_name="Reserved"),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            write_generated_files(root, generated)
+
+            sys.path.insert(0, str(root / "python"))
+            try:
+                importlib.invalidate_caches()
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    pkg = importlib.import_module("reserved")
+                    importlib.reload(pkg)
+                    m = pkg.CreateProxyRequest(schema="v1", json=True, copy="y", dict="z")
+                    self.assertEqual(m.model_dump(by_alias=True)["schema"], "v1")
+                pydantic_warns = [w for w in caught if "shadows an attribute" in str(w.message)]
+                self.assertEqual(pydantic_warns, [])
+            finally:
+                if str(root / "python") in sys.path:
+                    sys.path.remove(str(root / "python"))
+                for mod_name in list(sys.modules):
+                    if mod_name == "reserved" or mod_name.startswith("reserved."):
+                        sys.modules.pop(mod_name, None)
+
+            ts_runner = root / "typescript" / "check_reserved.ts"
+            ts_runner.write_text(
+                'import assert from "node:assert/strict";\n'
+                'import { ReservedClient } from "./index.ts";\n'
+                "let sentAuth = '';\n"
+                "let sentUrl = '';\n"
+                "const client = new ReservedClient({\n"
+                '  bearerToken: "Basic custom_basic",\n'
+                "  fetchFn: async (u, init) => {\n"
+                "    sentUrl = String(u);\n"
+                '    sentAuth = (init?.headers as Record<string, string>)["Authorization"] || "";\n'
+                '    return new Response(JSON.stringify({ model_config: "ok", validate: true }), {\n'
+                '      status: 200, headers: { "content-type": "application/json" }\n'
+                "    });\n"
+                "  }\n"
+                "});\n"
+                'await client.createProxy(42, { schema: "v1", json: true, copy: "y", dict: "z" });\n'
+                'assert.equal(sentAuth, "Basic custom_basic");\n'
+                'assert.ok(sentUrl.endsWith("/v1/proxy/42"));\n',
+                encoding="utf-8",
+            )
+            ts_proc = subprocess.run(
+                ["node", "--experimental-strip-types", str(ts_runner)],
+                cwd=root / "typescript",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(ts_proc.returncode, 0, f"{ts_proc.stdout}\n{ts_proc.stderr}")
+
+            js_proc = subprocess.run(
+                ["node", "--check", str(root / "javascript" / "client.mjs")],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(js_proc.returncode, 0, js_proc.stderr)

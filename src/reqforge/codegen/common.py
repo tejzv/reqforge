@@ -114,7 +114,26 @@ def resolve_endpoint_arg_names(
     *,
     camel_case: bool = False,
 ) -> tuple[list[tuple[ParamSpec, str]], list[tuple[ParamSpec, str]], list[tuple[ParamSpec, str]], str]:
-    used: set[str] = {"self", "headers", "cookies", "payload", "body"}
+    used: set[str] = {
+        "self",
+        "headers",
+        "cookies",
+        "payload",
+        "body",
+        "options",
+        "query",
+        "form",
+        "params",
+        "url",
+        "path",
+        "data",
+        "req_headers",
+        "req_cookies",
+        "json_body",
+        "form_data",
+        "files_data",
+        "form_params",
+    }
     path_args: list[tuple[ParamSpec, str]] = []
     query_args: list[tuple[ParamSpec, str]] = []
     form_args: list[tuple[ParamSpec, str]] = []

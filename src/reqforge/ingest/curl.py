@@ -40,6 +40,7 @@ VALUE_FLAGS = {
     "--referer",
     "-u",
     "--user",
+    "--oauth2-bearer",
     "-d",
     "--data",
     "--data-raw",
@@ -153,6 +154,10 @@ def _tokenize_cmd(line: str) -> list[str]:
         if quote_mode == "caret":
             if line[i : i + 2] == '^"' and (i + 2 >= n or line[i + 2] in " \t\n"):
                 quote_mode = None
+                i += 2
+                continue
+            if line[i : i + 2] == "^^":
+                buf.append("^")
                 i += 2
                 continue
             if line[i : i + 3] == '\\^"':
@@ -469,6 +474,8 @@ def _parse_single_curl_tokens(tokens: list[str], idx: int) -> CapturedRequest:
         elif flag in {"-u", "--user"}:
             encoded = base64.b64encode(val.encode("utf-8")).decode("ascii")
             basic_auth = f"Basic {encoded}"
+        elif flag == "--oauth2-bearer":
+            headers.append(("Authorization", f"Bearer {val}"))
         elif flag in {"-d", "--data", "--data-raw", "--data-ascii", "--data-binary"}:
             data_chunks.append(val)
         elif flag == "--data-urlencode":

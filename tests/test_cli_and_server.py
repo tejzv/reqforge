@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -115,6 +116,12 @@ class TestCliAndServer(unittest.TestCase):
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{port}/../pyproject.toml", timeout=5)
+                self.fail("Expected 404 on parent traversal path")
+            except urllib.error.HTTPError as err:
+                self.assertEqual(err.code, 404)
+
             with urllib.request.urlopen(http_req, timeout=5) as resp:
                 self.assertEqual(resp.status, 200)
                 payload = json.loads(resp.read().decode("utf-8"))
@@ -123,3 +130,31 @@ class TestCliAndServer(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+    def test_web_zip_builder_produces_valid_zip(self) -> None:
+        app_js = (Path(__file__).resolve().parent.parent / "src" / "reqforge" / "web" / "app.js").read_text(
+            encoding="utf-8"
+        )
+        start = app_js.index("function crc32(bytes)")
+        end = app_js.index("async function runForge()")
+        zip_funcs = app_js[start:end]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            out_zip = tmp / "bundle.zip"
+            script = tmp / "mkzip.mjs"
+            script.write_text(
+                'import fs from "node:fs";\n'
+                + zip_funcs
+                + "\nconst blob = buildZipBlob([\n"
+                '  { label: "python/client.py", content: "print(1)\\n" },\n'
+                '  { label: "python/models.py", content: "x = 2\\n" }\n'
+                "]);\n"
+                "const buf = Buffer.from(await blob.arrayBuffer());\n"
+                f'fs.writeFileSync({json.dumps(str(out_zip))}, buf);\n',
+                encoding="utf-8",
+            )
+            proc = subprocess.run(["node", str(script)], capture_output=True, text=True, check=False)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            with zipfile.ZipFile(out_zip) as zf:
+                self.assertEqual(zf.namelist(), ["python/client.py", "python/models.py"])
+                self.assertEqual(zf.read("python/client.py").decode("utf-8"), "print(1)\n")

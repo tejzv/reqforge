@@ -111,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe = sub.add_parser("probe", help="Run live header/cookie minimization probing against target endpoints")
     probe.add_argument("input", nargs="?", default="-")
     probe.add_argument("--json", action="store_true")
+    probe.add_argument("--out", "-o", default="", help="Write JSON probe report to file")
     probe.add_argument("--name", default="")
     probe.add_argument("--base-url", default="")
     _add_common_filter_args(probe)
@@ -158,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
             raw, src = _read_input(args.input)
             opts = _build_options_from_args(args, force_probe=True)
             result, _ = run_pipeline(raw, source_name=src, options=opts)
+            if args.out:
+                Path(args.out).write_text(result_to_json(result), encoding="utf-8")
             print(result_to_json(result) if args.json else format_terminal_report(result))
             return 0
 

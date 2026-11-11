@@ -173,7 +173,7 @@ def generate_javascript_sdk(result: ForgeResult) -> list[GeneratedFile]:
             lines.append(f"    if (this.{slot.ts_param_name}) {{")
             if slot.prefix:
                 lines.append(
-                    f"      const val = this.{slot.ts_param_name}.toLowerCase().startsWith({json.dumps(slot.prefix.lower())}) ? this.{slot.ts_param_name} : {json.dumps(slot.prefix)} + this.{slot.ts_param_name};"
+                    f'      const val = ["bearer ", "basic ", "token "].some((p) => this.{slot.ts_param_name}.toLowerCase().startsWith(p)) ? this.{slot.ts_param_name} : {json.dumps(slot.prefix)} + this.{slot.ts_param_name};'
                 )
                 lines.append(f"      headers[{json.dumps(slot.wire_name)}] = val;")
             else:

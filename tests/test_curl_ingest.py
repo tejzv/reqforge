@@ -59,13 +59,19 @@ class TestCurlIngest(unittest.TestCase):
         self.assertTrue((reqs[1].get_header("Authorization") or "").startswith("Basic "))
 
     def test_attached_short_flags_and_cookie_flag(self) -> None:
-        raw = "curl -XPUT -H\"X-Mode: fast\" -b 'sid=s123; theme=dark' --url=https://api.example.com:8443/cfg"
+        raw = "curl -XPUT -H\"X-Mode: fast\" -b 'sid=s123; theme=dark' --oauth2-bearer 'oa_tok_77' --url=https://api.example.com:8443/cfg"
         req = parse_curl(raw)
         self.assertEqual(req.method, "PUT")
         self.assertEqual(req.port, 8443)
         self.assertEqual(req.base_url(), "https://api.example.com:8443")
         self.assertEqual(req.get_header("X-Mode"), "fast")
+        self.assertEqual(req.get_header("Authorization"), "Bearer oa_tok_77")
         self.assertEqual(req.cookies, {"sid": "s123", "theme": "dark"})
+
+    def test_cmd_caret_literal_inside_quotes(self) -> None:
+        raw = 'curl ^"https://api.example.com/v1/echo^" --data-raw ^"^{^\\^"expr^\\^":^\\^"a^^b^\\^"^}^"'
+        req = parse_curl(raw)
+        self.assertEqual(req.body_json, {"expr": "a^b"})
 
     def test_invalid_curl_raises_parse_error(self) -> None:
         with self.assertRaises(ParseError):
@@ -74,3 +80,4 @@ class TestCurlIngest(unittest.TestCase):
             parse_curl("curl -X GET")
         with self.assertRaises(ParseError):
             parse_curl("   ")
+

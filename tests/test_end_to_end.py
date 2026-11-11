@@ -123,6 +123,39 @@ class TestEndToEndSmokeExecution(unittest.TestCase):
             self.assertEqual(ts_proc.returncode, 0, ts_proc.stderr)
             self.assertIn("OK getProject", ts_proc.stdout)
 
+    def test_generated_curl_cffi_smoke_executes_against_live_server(self) -> None:
+        curl_input = (
+            f"curl '{self.base_url}/v1/projects/12' "
+            "-H 'Authorization: Bearer e2e_secret' "
+            "-H 'sec-ch-ua: \"Chromium\"'"
+        )
+        _, generated = run_pipeline(
+            curl_input,
+            options=ForgeOptions(
+                target="python",
+                transport="curl_cffi",
+                client_name="StealthE2E",
+                probe=True,
+                probe_config=ProbeConfig(transport="curl_cffi", max_probes=20),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            write_generated_files(root, generated)
+            env = dict(os.environ)
+            env["API_BEARER_TOKEN"] = "e2e_secret"
+            env["API_BASE_URL"] = self.base_url
+            proc = subprocess.run(
+                [sys.executable, "smoke_test.py"],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("OK get_project: GetProjectResponse", proc.stdout)
+
     def test_curl_comment_skipping_and_empty_body_handling(self) -> None:
         raw = (
             "# pasted dev tools command\n"
@@ -130,3 +163,4 @@ class TestEndToEndSmokeExecution(unittest.TestCase):
         )
         result, _ = run_pipeline(raw, options=ForgeOptions(target="python"))
         self.assertEqual(result.endpoints[0].request_body_kind, "none")
+

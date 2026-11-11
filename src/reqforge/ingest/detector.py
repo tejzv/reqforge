@@ -42,3 +42,4 @@ def ingest_file(path: str | Path) -> list[CapturedRequest]:
         raise ParseError(f"Input file not found: {p}")
     content = p.read_text(encoding="utf-8", errors="replace")
     return ingest_text(content, source_name=p.name)
+

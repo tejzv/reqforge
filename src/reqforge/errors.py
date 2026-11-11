@@ -12,3 +12,4 @@ class ProbeError(ReqForgeError):
 
 class GenerationError(ReqForgeError):
     pass
+

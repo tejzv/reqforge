@@ -173,3 +173,4 @@ def infer_form_params(samples: list[CapturedRequest]) -> list[ParamSpec]:
         )
 
     return specs
+

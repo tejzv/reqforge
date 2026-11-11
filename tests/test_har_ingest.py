@@ -87,3 +87,4 @@ class TestHarIngest(unittest.TestCase):
             parse_har("{not valid json")
         with self.assertRaises(ParseError):
             parse_har(json.dumps({"log": {"entries": []}}))
+

@@ -17,17 +17,34 @@ from reqforge.models import EndpointGroup, ForgeResult, JsonSchemaNode, ParamSpe
 from reqforge.utils import to_pascal_case, to_snake_case
 
 PYDANTIC_RESERVED_ATTRS = {
-    "model_config",
-    "model_fields",
+    "construct",
+    "copy",
+    "dict",
+    "from_orm",
+    "json",
     "model_computed_fields",
-    "model_extra",
-    "model_fields_set",
+    "model_config",
+    "model_construct",
+    "model_copy",
     "model_dump",
     "model_dump_json",
+    "model_extra",
+    "model_fields",
+    "model_fields_set",
+    "model_json_schema",
+    "model_parametrized_name",
+    "model_post_init",
+    "model_rebuild",
     "model_validate",
     "model_validate_json",
-    "model_rebuild",
-    "model_copy",
+    "model_validate_strings",
+    "parse_file",
+    "parse_obj",
+    "parse_raw",
+    "schema",
+    "schema_json",
+    "update_forward_refs",
+    "validate",
 }
 
 
@@ -114,8 +131,12 @@ def _render_pydantic_models(result: ForgeResult) -> tuple[str, set[str]]:
         lines.append(f"class {node.model_name}(BaseModel):")
         lines.append('    model_config = ConfigDict(populate_by_name=True, extra="ignore")')
         lines.append("")
+        used_attrs: set[str] = set()
         for fld in node.fields.values():
             py_attr = f"{fld.name}_" if fld.name in PYDANTIC_RESERVED_ATTRS else fld.name
+            while py_attr in used_attrs:
+                py_attr = f"{py_attr}_"
+            used_attrs.add(py_attr)
             base_type = _py_schema_type(fld.node)
             is_optional = (not fld.required) or fld.nullable
             if is_optional and base_type != "None" and not base_type.endswith("| None"):
@@ -581,9 +602,9 @@ def _render_python_client(
     lines.extend(
         [
             "                if resp.status_code in RETRYABLE_STATUS_CODES and attempt < self.max_retries:",
-            '                    retry_after = resp.headers.get("Retry-After")',
+            '                    retry_after = (resp.headers.get("Retry-After") or "").strip()',
             "                    delay = (",
-            "                        float(retry_after)",
+            "                        max(0.0, float(retry_after))",
             "                        if retry_after and retry_after.replace('.', '', 1).isdigit()",
             "                        else self.retry_base_delay * (2**attempt) + random.uniform(0.0, 0.25)",
             "                    )",
@@ -735,6 +756,11 @@ def generate_python_sdk(
             and line != "from typing import Any"
             and line != "from pydantic import BaseModel, ConfigDict, Field"
         ]
+        while filtered_model_lines and filtered_model_lines[0] == "":
+            filtered_model_lines.pop(0)
+        while filtered_model_lines and filtered_model_lines[-1] == "":
+            filtered_model_lines.pop()
+
         combined_header = [
             "from __future__ import annotations",
             "",
@@ -747,7 +773,9 @@ def generate_python_sdk(
             "from curl_cffi.requests import AsyncSession"
             if chosen_transport == "curl_cffi"
             else "import httpx",
-            "from pydantic import BaseModel, ConfigDict, Field",
+            "from pydantic import BaseModel, ConfigDict, Field"
+            if model_names
+            else "from pydantic import BaseModel",
         ]
         client_lines = client_code.splitlines()
         body_start = 0
@@ -755,11 +783,10 @@ def generate_python_sdk(
             if ln.startswith("RETRYABLE_STATUS_CODES"):
                 body_start = i
                 break
+        middle = (["", ""] + filtered_model_lines + ["", ""]) if model_names else ["", ""]
         single_content = "\n".join(
             combined_header
-            + [""]
-            + filtered_model_lines
-            + [""]
+            + middle
             + client_lines[body_start:]
         ).rstrip() + "\n"
         return [

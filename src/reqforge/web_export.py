@@ -33,3 +33,4 @@ def export_static_web_bundle(out_dir: str | Path) -> list[Path]:
             zf.write(py_file, arcname=str(Path("reqforge") / rel).replace("\\", "/"))
     written.append(zip_path)
     return written
+

@@ -9,3 +9,4 @@ __all__ = [
     "infer_query_params",
     "infer_schema_from_samples",
 ]
+

@@ -113,6 +113,7 @@ const els = {
   codeOutput: document.getElementById("code-output"),
   btnCopy: document.getElementById("btn-copy"),
   btnDownload: document.getElementById("btn-download"),
+  btnDownloadZip: document.getElementById("btn-download-zip"),
   endpointsList: document.getElementById("endpoints-list"),
   auditView: document.getElementById("audit-view")
 };
@@ -229,6 +230,7 @@ function renderCodeTab() {
     els.codeOutput.textContent = "No files generated.";
     els.btnCopy.disabled = true;
     els.btnDownload.disabled = true;
+    els.btnDownloadZip.disabled = true;
     return;
   }
 
@@ -248,6 +250,27 @@ function renderCodeTab() {
   els.codeOutput.textContent = active.content;
   els.btnCopy.disabled = false;
   els.btnDownload.disabled = false;
+  els.btnDownloadZip.disabled = false;
+}
+
+function summarizeSchemaFields(schema) {
+  if (!schema) return "";
+  if (schema.kind === "object" && schema.fields) {
+    const entries = Object.values(schema.fields).slice(0, 12);
+    const chips = entries
+      .map((f) => {
+        const opt = f.required ? "" : "?";
+        const nul = f.nullable ? " | null" : "";
+        const typ = f.schema?.model_name || f.schema?.kind || "any";
+        return `<span class="chip">${escapeHtml(f.wire_name)}${opt}: ${escapeHtml(typ)}${nul}</span>`;
+      })
+      .join("");
+    return `<div class="chip-row">${chips}</div>`;
+  }
+  if (schema.kind === "array" && schema.items) {
+    return summarizeSchemaFields(schema.items);
+  }
+  return "";
 }
 
 function renderEndpointsTab() {
@@ -261,6 +284,8 @@ function renderEndpointsTab() {
     .map((ep) => {
       const pathParams = ep.path_params.map((p) => `${p.name}: ${p.inferred_type}`).join(", ");
       const queryParams = ep.query_params.map((p) => `${p.wire_name}: ${p.inferred_type}`).join(", ");
+      const reqFields = summarizeSchemaFields(ep.request_schema);
+      const respFields = summarizeSchemaFields(ep.response_schema);
       return `
         <div class="card">
           <h3><span class="method-pill">${escapeHtml(ep.method)}</span> ${escapeHtml(ep.path_template)}</h3>
@@ -268,6 +293,8 @@ function renderEndpointsTab() {
           ${pathParams ? `<div class="meta-line">Path params: <code>${escapeHtml(pathParams)}</code></div>` : ""}
           ${queryParams ? `<div class="meta-line">Query params: <code>${escapeHtml(queryParams)}</code></div>` : ""}
           <div class="meta-line">Models: req=<code>${escapeHtml(ep.request_model_name || "-")}</code> &middot; resp=<code>${escapeHtml(ep.response_model_name || "-")}</code></div>
+          ${reqFields ? `<div class="meta-line" style="margin-top:6px;">Request fields</div>${reqFields}` : ""}
+          ${respFields ? `<div class="meta-line" style="margin-top:6px;">Response fields</div>${respFields}` : ""}
         </div>
       `;
     })
@@ -280,6 +307,21 @@ function renderAuditTab() {
     els.auditView.innerHTML = "";
     return;
   }
+
+  const warningsHtml = a.warnings?.length
+    ? `<div class="card"><h3>Warnings</h3>${a.warnings.map((w) => `<div class="meta-line" style="color:#fcd34d;">&bull; ${escapeHtml(w)}</div>`).join("")}</div>`
+    : "";
+
+  const filteredSummary = {};
+  for (const item of a.filtered_out || []) {
+    filteredSummary[item.reason] = (filteredSummary[item.reason] || 0) + 1;
+  }
+  const filteredChips = Object.entries(filteredSummary)
+    .map(([reason, count]) => `<span class="chip chip-dropped">${escapeHtml(reason)}: ${count}</span>`)
+    .join("");
+  const filteredHtml = filteredChips
+    ? `<div class="card"><h3>Filtered Noise (${a.filtered_count})</h3><div class="chip-row">${filteredChips}</div></div>`
+    : "";
 
   const authHtml = a.auth_findings.length
     ? a.auth_findings
@@ -325,12 +367,95 @@ function renderAuditTab() {
     .join("");
 
   els.auditView.innerHTML = `
+    ${warningsHtml}
+    ${filteredHtml}
     <div class="card">
       <h3>Detected Auth &amp; Secrets</h3>
       <div class="chip-row">${authHtml}</div>
     </div>
     ${endpointAudit}
   `;
+}
+
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function buildZipBlob(files) {
+  const encoder = new TextEncoder();
+  const localChunks = [];
+  const centralChunks = [];
+  let offset = 0;
+
+  for (const f of files) {
+    const nameBytes = encoder.encode(f.label);
+    const dataBytes = encoder.encode(f.content);
+    const crc = crc32(dataBytes);
+
+    const localHeader = new ArrayBuffer(30);
+    const lv = new DataView(localHeader);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, dataBytes.length, true);
+    lv.setUint32(22, dataBytes.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+
+    localChunks.push(new Uint8Array(localHeader), nameBytes, dataBytes);
+
+    const centralHeader = new ArrayBuffer(46);
+    const cv = new DataView(centralHeader);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, dataBytes.length, true);
+    cv.setUint32(24, dataBytes.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
+
+    centralChunks.push(new Uint8Array(centralHeader), nameBytes);
+    offset += 30 + nameBytes.length + dataBytes.length;
+  }
+
+  let centralSize = 0;
+  for (const c of centralChunks) centralSize += c.length;
+
+  const endRecord = new ArrayBuffer(22);
+  const ev = new DataView(endRecord);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  ev.setUint16(20, 0, true);
+
+  return new Blob([...localChunks, ...centralChunks, new Uint8Array(endRecord)], {
+    type: "application/zip"
+  });
 }
 
 async function runForge() {
@@ -435,6 +560,25 @@ els.btnDownload.addEventListener("click", () => {
   a.download = active.path.split("/").pop() || "sdk.txt";
   a.click();
   URL.revokeObjectURL(url);
+});
+
+els.btnDownloadZip.addEventListener("click", () => {
+  if (!state.flatFiles.length) return;
+  const blob = buildZipBlob(state.flatFiles);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const name = (state.analysis?.client_name || "reqforge").toLowerCase();
+  a.href = url;
+  a.download = `${name}-sdk.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+els.rawInput.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    runForge();
+  }
 });
 
 els.btnForge.addEventListener("click", runForge);

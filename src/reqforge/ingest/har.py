@@ -214,3 +214,4 @@ def parse_har(raw_text: str) -> list[CapturedRequest]:
     if not results:
         raise ParseError("HAR file contained no valid HTTP requests")
     return results
+

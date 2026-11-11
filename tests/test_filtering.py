@@ -99,3 +99,4 @@ class TestFiltering(unittest.TestCase):
         for finding in res.auth_findings:
             self.assertNotIn("secret_999", finding.masked_preview)
             self.assertNotIn("secret_q_key", finding.masked_preview)
+

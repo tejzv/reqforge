@@ -64,3 +64,4 @@ def format_terminal_report(result: ForgeResult) -> str:
             lines.append(f"  ! {w}")
 
     return "\n".join(lines)
+

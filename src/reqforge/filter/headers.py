@@ -381,3 +381,4 @@ def minimalize_headers_and_cookies(
 
     result.auth_findings = classify_auth(req)
     return result
+

@@ -90,8 +90,9 @@ class ReqForgeHandler(BaseHTTPRequestHandler):
 
     def _send_static(self, rel_path: str) -> None:
         clean = rel_path.lstrip("/") or "index.html"
-        target = (WEB_DIR / clean).resolve()
-        if not str(target).startswith(str(WEB_DIR.resolve())) or not target.is_file():
+        web_root = WEB_DIR.resolve()
+        target = (web_root / clean).resolve()
+        if not target.is_relative_to(web_root) or not target.is_file():
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
         raw = target.read_bytes()
