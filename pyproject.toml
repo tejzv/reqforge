@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reqforge"
+version = "0.1.0"
+description = "Zero-LLM HAR and cURL to clean typed Python, TypeScript, and JavaScript SDK generator with live header minimization probing."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = []
+
+[project.optional-dependencies]
+http = ["httpx>=0.27.0", "pydantic>=2.0.0"]
+impersonate = ["curl_cffi>=0.7.0"]
+ui = ["fastapi>=0.110.0", "uvicorn>=0.29.0"]
+all = [
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "curl_cffi>=0.7.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+]
+
+[project.scripts]
+reqforge = "reqforge.cli:main"
+rqforge = "reqforge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+reqforge = ["web/*.html", "web/*.css", "web/*.js"]

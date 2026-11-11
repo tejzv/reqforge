@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReqForge Studio — HAR &amp; cURL to Clean SDK</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-badge">RF</span>
+      <div>
+        <h1>ReqForge Studio</h1>
+        <p class="subtitle">HAR &amp; cURL &rarr; Minimal, Typed Python / TS / JS SDKs</p>
+      </div>
+    </div>
+    <div class="status-group">
+      <span id="runtime-badge" class="badge badge-muted">Detecting runtime...</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="panel input-panel">
+      <div class="panel-header">
+        <h2>Input Capture</h2>
+        <div class="preset-actions">
+          <button type="button" id="btn-sample-curl" class="btn btn-ghost">Sample cURL</button>
+          <button type="button" id="btn-sample-har" class="btn btn-ghost">Sample HAR</button>
+          <label class="btn btn-ghost file-label">
+            Upload .har
+            <input type="file" id="har-file-input" accept=".har,.json,.txt" hidden>
+          </label>
+        </div>
+      </div>
+
+      <textarea
+        id="raw-input"
+        spellcheck="false"
+        placeholder="Paste Chrome DevTools 'Copy as cURL' command(s) or drop a .har file here..."
+      ></textarea>
+
+      <div class="controls-grid">
+        <label class="field">
+          <span>Target Language</span>
+          <select id="target-select">
+            <option value="python">Python (Async)</option>
+            <option value="typescript">TypeScript (Fetch)</option>
+            <option value="javascript">JavaScript (ESM)</option>
+            <option value="all">All Targets</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Python Transport</span>
+          <select id="transport-select">
+            <option value="auto">Auto (Detect)</option>
+            <option value="httpx">httpx</option>
+            <option value="curl_cffi">curl_cffi (TLS)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Client Name</span>
+          <input type="text" id="client-name" placeholder="Auto from host">
+        </label>
+
+        <label class="field">
+          <span>Base URL Override</span>
+          <input type="text" id="base-url" placeholder="Auto from capture">
+        </label>
+      </div>
+
+      <div class="toggles-row">
+        <label class="toggle"><input type="checkbox" id="opt-drop-static" checked> Drop static</label>
+        <label class="toggle"><input type="checkbox" id="opt-drop-trackers" checked> Drop trackers</label>
+        <label class="toggle"><input type="checkbox" id="opt-drop-options" checked> Drop OPTIONS</label>
+        <label class="toggle"><input type="checkbox" id="opt-drop-html" checked> Drop HTML docs</label>
+        <label class="toggle"><input type="checkbox" id="opt-single-file"> Single Python file</label>
+        <label class="toggle probe-toggle" title="Requires local reqforge ui server">
+          <input type="checkbox" id="opt-live-probe"> Live Header Probe
+        </label>
+      </div>
+
+      <div class="cta-row">
+        <button type="button" id="btn-forge" class="btn btn-primary">Forge SDK</button>
+        <span id="error-box" class="error-msg" hidden></span>
+      </div>
+    </section>
+
+    <section class="panel output-panel">
+      <div class="tabs-bar">
+        <div class="tabs-left">
+          <button type="button" class="tab-btn active" data-tab="code">SDK Code</button>
+          <button type="button" class="tab-btn" data-tab="endpoints">Endpoints &amp; Models</button>
+          <button type="button" class="tab-btn" data-tab="audit">Headers &amp; Auth</button>
+        </div>
+        <div class="summary-stats" id="summary-stats"></div>
+      </div>
+
+      <div id="tab-code" class="tab-pane active">
+        <div class="file-bar">
+          <div id="file-tabs" class="file-tabs"></div>
+          <div class="file-actions">
+            <button type="button" id="btn-copy" class="btn btn-ghost" disabled>Copy</button>
+            <button type="button" id="btn-download" class="btn btn-ghost" disabled>Download</button>
+          </div>
+        </div>
+        <pre class="code-view"><code id="code-output">Paste a cURL command or upload a HAR capture, then click Forge SDK.</code></pre>
+      </div>
+
+      <div id="tab-endpoints" class="tab-pane">
+        <div id="endpoints-list" class="cards-list"></div>
+      </div>
+
+      <div id="tab-audit" class="tab-pane">
+        <div id="audit-view" class="cards-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
