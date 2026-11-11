@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.resources
 import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,6 +14,7 @@ from reqforge.pipeline import ForgeOptions, run_pipeline_async
 from reqforge.probe import ProbeConfig, has_curl_cffi, has_httpx
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
+ALLOWED_STATIC_FILES = {"index.html", "styles.css", "app.js"}
 MAX_BODY_BYTES = 25 * 1024 * 1024
 
 CONTENT_TYPES = {
@@ -90,13 +92,19 @@ class ReqForgeHandler(BaseHTTPRequestHandler):
 
     def _send_static(self, rel_path: str) -> None:
         clean = rel_path.lstrip("/") or "index.html"
-        web_root = WEB_DIR.resolve()
-        target = (web_root / clean).resolve()
-        if not target.is_relative_to(web_root) or not target.is_file():
+        if clean not in ALLOWED_STATIC_FILES:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
-        raw = target.read_bytes()
-        ct = CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
+        try:
+            raw = importlib.resources.files("reqforge").joinpath("web", clean).read_bytes()
+        except (FileNotFoundError, OSError):
+            target = (WEB_DIR / clean).resolve()
+            if not target.is_relative_to(WEB_DIR.resolve()) or not target.is_file():
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+                return
+            raw = target.read_bytes()
+        suffix = Path(clean).suffix.lower()
+        ct = CONTENT_TYPES.get(suffix, "application/octet-stream")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", ct)
         self.send_header("Content-Length", str(len(raw)))

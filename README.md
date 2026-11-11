@@ -1,15 +1,24 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:161b22,100:1f6feb&height=190&section=header&text=ReqForge&fontSize=64&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=HAR%20%26%20cURL%20%E2%86%92%20Clean%2C%20Minimal%2C%20Typed%20SDKs&descAlignY=62&descSize=17" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:161b22,100:1f6feb&height=190&section=header&text=ReqForge&fontSize=64&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=HAR%20%E2%80%A2%20cURL%20%E2%80%A2%20Zero-LLM%20Typed%20SDK%20Generator&descAlignY=62&descSize=17" width="100%" />
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=18&duration=2800&pause=1000&color=58A6FF&center=true&vCenter=true&width=720&lines=HAR+%26+cURL+%E2%86%92+Async+Python+(httpx+%2F+curl_cffi)+%2B+TS+%2B+JS;Live+Delta-Debugging+Header+%26+Cookie+Minimization+Probe;Zero+LLMs+%E2%80%A2+100%25+Local+%E2%80%A2+Pydantic+v2+%26+TypeScript+Models" alt="ReqForge Highlights" />
+<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=18&duration=2800&pause=1000&color=58A6FF&center=true&vCenter=true&width=720&lines=HAR+%2B+cURL+%E2%86%92+Async+Python+(httpx+%2F+curl_cffi)+%2B+TS+%2B+JS;Live+Delta-Debugging+Header+%26+Cookie+Minimization+Probe;Zero+LLMs+%E2%80%A2+100%25+Local+%E2%80%A2+Pydantic+v2+%26+TypeScript+Models" alt="ReqForge Highlights" />
 
 <p>
+  <a href="https://github.com/tejzv/reqforge/releases/latest"><img src="https://img.shields.io/github/v/release/tejzv/reqforge?style=for-the-badge&color=1f6feb&label=Release" /></a>
+  <a href="https://github.com/tejzv/reqforge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/tejzv/reqforge/ci.yml?style=for-the-badge&label=CI" /></a>
+  <a href="https://github.com/tejzv/reqforge/stargazers"><img src="https://img.shields.io/github/stars/tejzv/reqforge?style=for-the-badge&color=d29922" /></a>
   <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/httpx_%2B_curl__cffi-TLS_Ready-009688?style=for-the-badge" />
   <img src="https://img.shields.io/badge/TypeScript_%26_JS-Fetch_SDK-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
-  <img src="https://img.shields.io/badge/Zero_LLMs-100%25_Local-8957e5?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/License-MIT-238636?style=for-the-badge" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-238636?style=for-the-badge" /></a>
+</p>
+
+<p>
+  <a href="https://github.com/tejzv/reqforge/releases/latest"><b>Latest Release</b></a> &nbsp;&bull;&nbsp;
+  <a href="#installation"><b>Installation</b></a> &nbsp;&bull;&nbsp;
+  <a href="#quick-start"><b>Quick Start</b></a> &nbsp;&bull;&nbsp;
+  <a href="#how-reqforge-works"><b>Architecture</b></a> &nbsp;&bull;&nbsp;
+  <a href="https://discord.gg/PYfeSaDGPJ"><b>Discord</b></a>
 </p>
 
 <br />
@@ -22,24 +31,24 @@
 
 ## Why ReqForge?
 
-Whenever you inspect a site or API in Chrome DevTools (**Copy as cURL** or **Save all as HAR**) to build a lightweight request-based tool, you inherit 25 noisy browser headers, tracking cookies (`_ga`, `_fbp`), hardcoded tokens, and fragile boilerplate.
+Inspecting an app in Chrome DevTools (**Copy as cURL** or **Save all as HAR**) to build a fast request-based tool leaves you with 25 noisy browser headers, tracking cookies (`_ga`, `_fbp`), hardcoded auth tokens, and tedious boilerplate.
 
-**ReqForge** strips the noise, optionally replays and probes live endpoints with `httpx` or `curl_cffi` to isolate the **exact minimal headers, cookies, and query params** required for a valid response, infers dynamic routes & JSON models, and emits a clean, ready-to-run async SDK + smoke test — **100% locally with zero LLMs and zero paid APIs.**
+**ReqForge** filters the noise, optionally replays and probes live endpoints with `httpx` or `curl_cffi` to isolate the **exact minimal headers, cookies, and query params** required for a matching response, infers parameterized routes and schemas, and generates clean async SDKs + smoke tests — **100% locally with zero LLMs.**
 
 <table>
   <tr>
     <td width="50%">
       <h3>🧹 Noise &amp; Tracker Filtering</h3>
       <ul>
-        <li>Drops static files (<code>.css</code>, <code>.js</code>, fonts, images, media), preflight <code>OPTIONS</code>, HTML documents, and telemetry beacons</li>
+        <li>Drops static assets (<code>.css</code>, <code>.js</code>, fonts, images, media), preflight <code>OPTIONS</code>, HTML navigations, and telemetry beacons</li>
         <li>Strips browser bloat (<code>sec-ch-ua*</code>, <code>sec-fetch-*</code>, <code>priority</code>, <code>dnt</code>) &amp; tracking cookies (<code>_ga</code>, <code>_fbp</code>, <code>_hj*</code>)</li>
       </ul>
     </td>
     <td width="50%">
       <h3>🔬 Live Delta-Debugging Probe</h3>
       <ul>
-        <li>Binary-splits headers, cookies, and query params against the live endpoint in logarithmic HTTP calls</li>
-        <li>Detects soft-200 error payloads &amp; HTML redirects, and auto-detects when <code>curl_cffi</code> TLS impersonation is required</li>
+        <li>Binary-splits headers, cookies, and query params against live targets in logarithmic HTTP probes</li>
+        <li>Catches soft-200 error payloads &amp; HTML redirects, and auto-detects when <code>curl_cffi</code> TLS impersonation is required</li>
       </ul>
     </td>
   </tr>
@@ -48,14 +57,14 @@ Whenever you inspect a site or API in Chrome DevTools (**Copy as cURL** or **Sav
       <h3>🧬 Parameter &amp; Schema Inference</h3>
       <ul>
         <li>Clusters paths into parameterized routes (<code>/users/{user_id}/orders</code>), splits GraphQL by <code>operationName</code> &amp; JSON-RPC by <code>method</code></li>
-        <li>Merges multi-sample JSON payloads into Pydantic v2 models and TypeScript interfaces with nullable/optional tracking</li>
+        <li>Merges multi-sample JSON payloads into Pydantic v2 models and TypeScript interfaces with nullable &amp; optional tracking</li>
       </ul>
     </td>
     <td width="50%">
       <h3>⚡ Multi-Target SDK + Web Studio</h3>
       <ul>
         <li>Generates pooled async Python (<code>httpx</code> / <code>curl_cffi</code>), typed TypeScript, and ESM JavaScript <code>fetch</code> clients with retries &amp; <code>from_env()</code></li>
-        <li>Includes <code>reqforge ui</code> local studio + <code>reqforge export-web</code> standalone Pyodide browser bundle</li>
+        <li>Ships <code>reqforge ui</code> local studio + <code>reqforge export-web</code> standalone Pyodide browser bundle</li>
       </ul>
     </td>
   </tr>
@@ -122,13 +131,25 @@ async with OrdersClient.from_env() as client:
 
 ## Installation
 
+### Option 1 — Install From Source (Recommended)
+
 ```bash
 git clone https://github.com/tejzv/reqforge.git
 cd reqforge
 pip install -e ".[all]"
 ```
 
-Core parsing, filtering, schema inference, SDK generation, and the stdlib Web Studio run with **zero required dependencies** (`pip install -e .`). Installing `.[all]` enables live HTTP probing with `httpx`, TLS browser impersonation via `curl_cffi`, and Pydantic model validation.
+Core parsing, filtering, schema inference, SDK generation, and the stdlib Web Studio run with **zero required dependencies** (`pip install -e .`). Adding `.[all]` enables live probing with `httpx`, TLS browser impersonation via `curl_cffi`, and Pydantic model validation.
+
+### Option 2 — Prebuilt Release Artifacts ([Latest Release](https://github.com/tejzv/reqforge/releases/latest))
+
+Download directly from **[Releases → Latest](https://github.com/tejzv/reqforge/releases/latest)**:
+
+| Artifact | Usage |
+| :--- | :--- |
+| `reqforge-0.1.0-py3-none-any.whl` | `pip install reqforge-0.1.0-py3-none-any.whl` |
+| `reqforge-v0.1.0.pyz` | Zero-install portable executable: `python reqforge-v0.1.0.pyz ui` |
+| `reqforge-web-v0.1.0.zip` | Ready-to-host static browser studio (Pyodide powered, works on GitHub Pages / `tejv.in`) |
 
 ---
 
@@ -159,7 +180,7 @@ reqforge generate capture.har --target javascript --out ./js_sdk
 reqforge generate capture.har --target all --out ./generated_sdks
 ```
 
-Pipe directly from clipboard / stdin:
+Pipe directly from clipboard or stdin:
 
 ```bash
 cat devtools.curl | reqforge generate - --stdout --single-file --target python
@@ -179,7 +200,17 @@ Opens the interactive browser workbench with CORS-free live probing, visual head
 reqforge export-web --out ./dist_web
 ```
 
-Packages the exact Python core into `reqforge_core.zip` alongside `index.html`, `styles.css`, and `app.js`, automatically executing in-browser via Pyodide when no local backend server is present.
+---
+
+## How ReqForge Works
+
+| Stage | Module | What Happens |
+| :--- | :--- | :--- |
+| **1. Ingest** | `reqforge.ingest` | Parses HAR 1.2 captures and Bash/CMD/PowerShell cURL batches into normalized `CapturedRequest` models |
+| **2. Filter & Classify** | `reqforge.filter` | Drops static/tracker/preflight noise, strips browser-bloat headers & tracking cookies, and flags auth tokens |
+| **3. Live Probe** | `reqforge.probe` | Runs `ddmin` delta debugging over headers, cookies, and query params with `httpx` / `curl_cffi` TLS auto-selection |
+| **4. Infer** | `reqforge.infer` | Parameterizes path segments, separates GraphQL & JSON-RPC calls, and merges JSON samples into typed AST schemas |
+| **5. Export** | `reqforge.codegen` | Emits pooled async Python, typed TypeScript, ESM JavaScript SDKs, runnable smoke tests, and studio bundles |
 
 ---
 
@@ -206,11 +237,13 @@ Packages the exact Python core into `reqforge_core.zip` alongside `index.html`, 
 
 ---
 
-## Running Tests
+## Running Tests & Contributing
 
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+Contributions, bug reports, and feature ideas are welcome — see [CHANGELOG.md](CHANGELOG.md) and open an issue or pull request.
 
 ---
 
