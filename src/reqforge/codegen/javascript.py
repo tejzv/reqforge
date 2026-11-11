@@ -86,7 +86,13 @@ def _render_js_method(
         lines.append('    if (!headers["Content-Type"] && !headers["content-type"]) {')
         lines.append('      headers["Content-Type"] = "application/json";')
         lines.append("    }")
-    elif ep.request_body_kind in {"form", "multipart"} and form_args:
+    elif ep.request_body_kind == "multipart" and form_args:
+        lines.append("    const body = new FormData();")
+        for p, arg_name in form_args:
+            lines.append(f"    if (form?.{arg_name} !== undefined && form.{arg_name} !== null) {{")
+            lines.append(f"      body.append({json.dumps(p.wire_name)}, String(form.{arg_name}));")
+            lines.append("    }")
+    elif ep.request_body_kind == "form" and form_args:
         lines.append("    const formParams = new URLSearchParams();")
         for p, arg_name in form_args:
             lines.append(f"    if (form?.{arg_name} !== undefined && form.{arg_name} !== null) {{")
@@ -266,7 +272,8 @@ def generate_javascript_sdk(result: ForgeResult) -> list[GeneratedFile]:
             sample = p.sample_values[0] if p.sample_values else (1 if p.inferred_type == "int" else "example")
             req_args.append(json.dumps(sample))
         if ep.request_body_kind == "json":
-            req_args.append(json.dumps(ep.request_example or {}))
+            ex = ep.request_example if ep.request_example is not None else {}
+            req_args.append(json.dumps(ex))
         elif ep.request_body_kind in {"form", "multipart"} and form_args:
             if any(p.required for p, _ in form_args):
                 obj = {

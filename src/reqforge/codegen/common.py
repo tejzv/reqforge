@@ -75,11 +75,18 @@ def safe_default_headers(endpoint: EndpointGroup, auth_slots: list[AuthSlot]) ->
     auth_header_names = {
         slot.wire_name.lower() for slot in auth_slots if slot.location == "header"
     }
-    return {
-        k: v
-        for k, v in endpoint.required_headers.items()
-        if k.lower() not in auth_header_names
-    }
+    cleaned: dict[str, str] = {}
+    for k, v in endpoint.required_headers.items():
+        if k.lower() in auth_header_names:
+            continue
+        if (
+            endpoint.request_body_kind == "multipart"
+            and k.lower() == "content-type"
+            and "boundary=" in v.lower()
+        ):
+            continue
+        cleaned[k] = v
+    return cleaned
 
 
 def safe_default_cookies(endpoint: EndpointGroup, auth_slots: list[AuthSlot]) -> dict[str, str]:

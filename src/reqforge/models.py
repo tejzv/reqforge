@@ -184,6 +184,8 @@ class ProbeReport:
     removed_headers: list[str] = field(default_factory=list)
     required_cookies: list[str] = field(default_factory=list)
     removed_cookies: list[str] = field(default_factory=list)
+    required_query_params: list[str] = field(default_factory=list)
+    removed_query_params: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -199,6 +201,8 @@ class ProbeReport:
             "removed_headers": self.removed_headers,
             "required_cookies": self.required_cookies,
             "removed_cookies": self.removed_cookies,
+            "required_query_params": self.required_query_params,
+            "removed_query_params": self.removed_query_params,
             "notes": self.notes,
         }
 

@@ -60,14 +60,24 @@ class TestInference(unittest.TestCase):
     def test_graphql_operation_splitting(self) -> None:
         g1 = _req("1", "POST", "/graphql", body_json={"operationName": "GetViewer", "variables": {}}, resp_json={"data": {"id": "1"}})
         g2 = _req("2", "POST", "/graphql", body_json={"operationName": "CreatePost", "variables": {"title": "Hi"}}, resp_json={"data": {"ok": True}})
-        endpoints = cluster_and_infer_endpoints([g1, g2])
-        self.assertEqual(len(endpoints), 2)
-        self.assertEqual([e.operation_id for e in endpoints], ["graphql_get_viewer", "graphql_create_post"])
+        g3 = _req("3", "POST", "/graphql", body_json={"query": "query GetSettings { theme }"}, resp_json={"data": {"theme": "dark"}})
+        endpoints = cluster_and_infer_endpoints([g1, g2, g3])
+        self.assertEqual(len(endpoints), 3)
+        self.assertEqual(
+            [e.operation_id for e in endpoints],
+            ["graphql_get_viewer", "graphql_create_post", "graphql_get_settings"],
+        )
+
+    def test_jsonrpc_method_splitting(self) -> None:
+        r1 = _req("1", "POST", "/rpc", body_json={"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber"}, resp_json={"result": "0x1"})
+        r2 = _req("2", "POST", "/rpc", body_json={"jsonrpc": "2.0", "id": 2, "method": "eth_getBalance"}, resp_json={"result": "0x0"})
+        endpoints = cluster_and_infer_endpoints([r1, r2])
+        self.assertEqual([e.operation_id for e in endpoints], ["rpc_eth_block_number", "rpc_eth_get_balance"])
 
     def test_schema_merging_nullables_optional_and_numeric_widening(self) -> None:
         samples = [
             {"id": 1, "score": 10, "from": "web", "tags": ["a"], "meta": {}},
-            {"id": 2, "score": 10.5, "from": None, "extra": "ok", "tags": ["b"], "meta": {}},
+            {"id": 2, "$id": "ext-2", "score": 10.5, "from": None, "extra": "ok", "tags": ["b"], "meta": {}},
         ]
         node = infer_schema_from_samples(samples, root_name="ItemResponse")
         self.assertIsNotNone(node)
@@ -76,5 +86,6 @@ class TestInference(unittest.TestCase):
         self.assertEqual(node.fields["score"].node.kind, "number")
         self.assertTrue(node.fields["from"].nullable)
         self.assertEqual(node.fields["from"].name, "from_")
+        self.assertNotEqual(node.fields["id"].name, node.fields["$id"].name)
         self.assertFalse(node.fields["extra"].required)
         self.assertIsNone(node.fields["meta"].node.model_name)

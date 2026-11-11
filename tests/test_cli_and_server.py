@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -24,27 +28,63 @@ class TestCliAndServer(unittest.TestCase):
             in_file = tmp / "req.curl"
             in_file.write_text(sample_curl, encoding="utf-8")
 
-            rc_analyze = cli_main(["analyze", str(in_file), "--json"])
+            buf_analyze = io.StringIO()
+            with contextlib.redirect_stdout(buf_analyze):
+                rc_analyze = cli_main(["analyze", str(in_file), "--json"])
             self.assertEqual(rc_analyze, 0)
+            analyzed = json.loads(buf_analyze.getvalue())
+            self.assertEqual(analyzed["kept_endpoints"], 1)
+            self.assertEqual(analyzed["endpoints"][0]["operation_id"], "get_item")
 
             out_dir = tmp / "sdks"
-            rc_gen = cli_main(
-                ["generate", str(in_file), "--target", "all", "--out", str(out_dir)]
-            )
+            buf_gen = io.StringIO()
+            with contextlib.redirect_stdout(buf_gen):
+                rc_gen = cli_main(
+                    ["generate", str(in_file), "--target", "all", "--out", str(out_dir)]
+                )
             self.assertEqual(rc_gen, 0)
+            self.assertIn("ReqForge Analysis:", buf_gen.getvalue())
             self.assertTrue((out_dir / "python" / "smoke_test.py").is_file())
             self.assertTrue((out_dir / "typescript" / "client.ts").is_file())
+            self.assertTrue((out_dir / "typescript" / "tsconfig.json").is_file())
             self.assertTrue((out_dir / "javascript" / "client.mjs").is_file())
 
             web_out = tmp / "web_bundle"
-            rc_web = cli_main(["export-web", "--out", str(web_out)])
+            buf_web = io.StringIO()
+            with contextlib.redirect_stdout(buf_web):
+                rc_web = cli_main(["export-web", "--out", str(web_out)])
             self.assertEqual(rc_web, 0)
+            self.assertIn("Exported 4 static web bundle file(s)", buf_web.getvalue())
             zip_path = web_out / "reqforge_core.zip"
             self.assertTrue(zip_path.is_file())
             with zipfile.ZipFile(zip_path) as zf:
                 names = set(zf.namelist())
                 self.assertIn("reqforge/pipeline.py", names)
                 self.assertIn("reqforge/ingest/curl.py", names)
+
+            unzipped = tmp / "pyodide_sim"
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(unzipped)
+
+            code = (
+                "import json, pathlib, reqforge\n"
+                "from reqforge.pipeline import forge_json_sync\n"
+                "assert pathlib.Path(reqforge.__file__).resolve().is_relative_to(pathlib.Path.cwd().resolve())\n"
+                "res = json.loads(forge_json_sync(json.dumps({\n"
+                "  'input': \"curl 'https://api.example.com/v1/items/99' -H 'X-Api-Key: abc'\",\n"
+                "  'target': 'python'\n"
+                "})))\n"
+                "assert res['analysis']['kept_endpoints'] == 1\n"
+                "assert len(res['files']['python']) >= 4\n"
+            )
+            proc = subprocess.run(
+                [sys.executable, "-c", code],
+                cwd=unzipped,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, f"{proc.stdout}\n{proc.stderr}")
 
     def test_local_web_server_endpoints(self) -> None:
         server = create_server(host="127.0.0.1", port=0)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import io
 import os
 import re
@@ -29,6 +30,13 @@ def _assert_no_python_comments_or_docstrings(test_case: unittest.TestCase, sourc
             tokenize.COMMENT,
             f"Found Python comment in {label} at line {tok.start[0]}: {tok.string}",
         )
+    tree = ast.parse(source, filename=label)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            test_case.assertIsNone(
+                ast.get_docstring(node, clean=False),
+                f"Found docstring in {label}",
+            )
 
 
 def _strip_js_strings(text: str) -> str:

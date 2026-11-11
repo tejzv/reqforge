@@ -31,6 +31,7 @@ class ProbeConfig:
     delay_seconds: float = 0.0
     max_probes: int = 80
     minimize_cookies: bool = True
+    minimize_query: bool = False
     impersonate: str = "chrome"
     verify_ssl: bool = True
 
@@ -41,6 +42,8 @@ class ProbeOutcome:
     dropped_headers: list[str] = field(default_factory=list)
     kept_cookies: dict[str, str] = field(default_factory=dict)
     dropped_cookies: list[str] = field(default_factory=list)
+    kept_query_keys: list[str] = field(default_factory=list)
+    dropped_query_keys: list[str] = field(default_factory=list)
     report: ProbeReport | None = None
     baseline_snapshot: ResponseSnapshot | None = None
 
@@ -332,6 +335,26 @@ async def minimize_request_live(
         kept_cookies = {k: all_cookies[k] for k in kept_cookie_keys}
         dropped_cookies = [k for k in all_cookies if k not in kept_cookie_keys]
 
+        distinct_q_keys = list(dict.fromkeys(k for k, _ in req.query_params))
+        kept_query_keys = list(distinct_q_keys)
+        if cfg.minimize_query and distinct_q_keys and minimizer.probe_count < cfg.max_probes - 1:
+            async def test_query_subset(subset_keys: list[str]) -> bool:
+                allowed = set(subset_keys)
+                qp = [(k, v) for k, v in req.query_params if k in allowed]
+                try:
+                    snap = await chosen_transport.send(req, kept_headers, kept_cookies, qp)
+                except ProbeError:
+                    return False
+                matched, _ = is_equivalent_response(baseline_snap, snap)
+                return matched
+
+            kept_query_keys = await minimizer.find_minimal_keys(
+                distinct_q_keys,
+                test_query_subset,
+            )
+
+        dropped_query_keys = [k for k in distinct_q_keys if k not in kept_query_keys]
+
         report = ProbeReport(
             transport_used=used_name,
             recommended_transport=recommended,
@@ -344,6 +367,8 @@ async def minimize_request_live(
             removed_headers=dropped_headers,
             required_cookies=list(kept_cookies.keys()),
             removed_cookies=dropped_cookies,
+            required_query_params=kept_query_keys,
+            removed_query_params=dropped_query_keys,
             notes=notes,
         )
         return ProbeOutcome(
@@ -351,6 +376,8 @@ async def minimize_request_live(
             dropped_headers=dropped_headers,
             kept_cookies=kept_cookies,
             dropped_cookies=dropped_cookies,
+            kept_query_keys=kept_query_keys,
+            dropped_query_keys=dropped_query_keys,
             report=report,
             baseline_snapshot=baseline_snap,
         )

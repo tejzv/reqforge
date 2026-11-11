@@ -102,14 +102,24 @@ class TestCodegenAndExecution(unittest.TestCase):
 
                 async def run_client() -> None:
                     with patch.dict(os.environ, {"API_BEARER_TOKEN": "env_tok_999"}):
-                        client = pkg.DemoClient.from_env()
+                        client = pkg.DemoClient.from_env(retry_base_delay=0.01)
                     await client._client.aclose()
+                    attempts = {"count": 0}
+
+                    def flaky_handler(request: httpx.Request) -> httpx.Response:
+                        if request.method == "GET" and request.url.path == "/v1/users/42":
+                            attempts["count"] += 1
+                            if attempts["count"] == 1:
+                                return httpx.Response(429, headers={"Retry-After": "0.01"}, text="slow down")
+                        return handler(request)
+
                     client._client = httpx.AsyncClient(
                         base_url="https://api.demo.test",
-                        transport=httpx.MockTransport(handler),
+                        transport=httpx.MockTransport(flaky_handler),
                     )
                     async with client:
                         user = await client.get_user(user_id=42)
+                        self.assertEqual(attempts["count"], 2)
                         self.assertEqual(user.id, 42)
                         self.assertEqual(user.from_, "oauth")
                         created = await client.create_user_items(
@@ -225,3 +235,28 @@ class TestCodegenAndExecution(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, f"{proc.stdout}\n{proc.stderr}")
+
+    def test_multihost_and_multipart_across_all_targets(self) -> None:
+        raw = (
+            "curl 'https://api.demo.test/v1/users/42' -H 'Accept: application/json'\n"
+            "curl 'https://upload.demo.test/v1/files/77' "
+            "-H 'Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryABC' "
+            "-F 'title=report' -F 'kind=pdf'"
+        )
+        _, generated = run_pipeline(
+            raw,
+            options=ForgeOptions(target="all", client_name="Multi"),
+        )
+        py_client = next(f.content for f in generated["python"] if f.path.endswith("client.py"))
+        self.assertNotIn("WebKitFormBoundaryABC", py_client)
+        self.assertIn("https://upload.demo.test/v1/files/", py_client)
+        self.assertIn("files_data=", py_client)
+        ast.parse(py_client)
+
+        ts_client = next(f.content for f in generated["typescript"] if f.path == "client.ts")
+        self.assertNotIn("WebKitFormBoundaryABC", ts_client)
+        self.assertIn("new FormData()", ts_client)
+
+        js_client = next(f.content for f in generated["javascript"] if f.path == "client.mjs")
+        self.assertNotIn("WebKitFormBoundaryABC", js_client)
+        self.assertIn("new FormData()", js_client)

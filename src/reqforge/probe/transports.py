@@ -30,6 +30,7 @@ class ProbeTransport(Protocol):
         req: CapturedRequest,
         headers: dict[str, str],
         cookies: dict[str, str],
+        query_params: list[tuple[str, str]] | None = None,
     ) -> ResponseSnapshot:
         ...
 
@@ -37,10 +38,14 @@ class ProbeTransport(Protocol):
         ...
 
 
-def _build_target_url(req: CapturedRequest) -> str:
+def _build_target_url(
+    req: CapturedRequest,
+    query_params: list[tuple[str, str]] | None = None,
+) -> str:
     base = f"{req.base_url()}{req.path}"
-    if req.query_params:
-        return f"{base}?{urlencode(req.query_params)}"
+    qp = req.query_params if query_params is None else query_params
+    if qp:
+        return f"{base}?{urlencode(qp)}"
     return base
 
 
@@ -48,8 +53,9 @@ def _prepare_wire_payload(
     req: CapturedRequest,
     headers: dict[str, str],
     cookies: dict[str, str],
+    query_params: list[tuple[str, str]] | None = None,
 ) -> tuple[str, dict[str, str], bytes | None]:
-    url = _build_target_url(req)
+    url = _build_target_url(req, query_params)
     wire_headers = dict(headers)
     if cookies:
         wire_headers["Cookie"] = format_cookie_header(cookies)
@@ -78,14 +84,16 @@ class HttpxProbeTransport:
             verify=verify_ssl,
             http2=http2_available,
         )
+        self._client.headers.clear()
 
     async def send(
         self,
         req: CapturedRequest,
         headers: dict[str, str],
         cookies: dict[str, str],
+        query_params: list[tuple[str, str]] | None = None,
     ) -> ResponseSnapshot:
-        url, wire_headers, body_bytes = _prepare_wire_payload(req, headers, cookies)
+        url, wire_headers, body_bytes = _prepare_wire_payload(req, headers, cookies, query_params)
         self._client.cookies.clear()
         try:
             resp = await self._client.request(
@@ -112,39 +120,39 @@ class CurlCffiProbeTransport:
         verify_ssl: bool = True,
         impersonate: str = "chrome",
     ) -> None:
-        self._timeout = timeout
-        self._verify = verify_ssl
-        self._impersonate = impersonate
+        from curl_cffi.requests import AsyncSession
+
+        self._session = AsyncSession(
+            impersonate=impersonate,
+            timeout=timeout,
+            verify=verify_ssl,
+            default_headers=False,
+        )
 
     async def send(
         self,
         req: CapturedRequest,
         headers: dict[str, str],
         cookies: dict[str, str],
+        query_params: list[tuple[str, str]] | None = None,
     ) -> ResponseSnapshot:
-        from curl_cffi.requests import AsyncSession
-
-        url, wire_headers, body_bytes = _prepare_wire_payload(req, headers, cookies)
+        url, wire_headers, body_bytes = _prepare_wire_payload(req, headers, cookies, query_params)
         try:
-            async with AsyncSession(
-                impersonate=self._impersonate,
-                timeout=self._timeout,
-                verify=self._verify,
-            ) as session:
-                resp = await session.request(
-                    method=req.method,
-                    url=url,
-                    headers=wire_headers,
-                    data=body_bytes,
-                    allow_redirects=True,
-                )
+            resp = await self._session.request(
+                method=req.method,
+                url=url,
+                headers=wire_headers,
+                data=body_bytes,
+                allow_redirects=True,
+                discard_cookies=True,
+            )
         except Exception as exc:
             raise ProbeError(f"curl_cffi request failed: {exc}") from exc
         ct = resp.headers.get("content-type", "") if resp.headers else ""
         return ResponseSnapshot.from_raw(int(resp.status_code), str(ct), resp.text or "")
 
     async def aclose(self) -> None:
-        return None
+        await self._session.close()
 
 
 class UrllibProbeTransport:
@@ -159,8 +167,9 @@ class UrllibProbeTransport:
         req: CapturedRequest,
         headers: dict[str, str],
         cookies: dict[str, str],
+        query_params: list[tuple[str, str]] | None = None,
     ) -> ResponseSnapshot:
-        url, wire_headers, body_bytes = _prepare_wire_payload(req, headers, cookies)
+        url, wire_headers, body_bytes = _prepare_wire_payload(req, headers, cookies, query_params)
         request_obj = urllib.request.Request(
             url=url,
             data=body_bytes,
@@ -185,8 +194,9 @@ class UrllibProbeTransport:
         req: CapturedRequest,
         headers: dict[str, str],
         cookies: dict[str, str],
+        query_params: list[tuple[str, str]] | None = None,
     ) -> ResponseSnapshot:
-        return await asyncio.to_thread(self._send_sync, req, headers, cookies)
+        return await asyncio.to_thread(self._send_sync, req, headers, cookies, query_params)
 
     async def aclose(self) -> None:
         return None

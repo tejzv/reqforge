@@ -43,6 +43,7 @@ def _add_probe_args(parser: argparse.ArgumentParser, *, probe_flag: bool = True)
     parser.add_argument("--probe-delay", type=float, default=0.0)
     parser.add_argument("--max-probes", type=int, default=80)
     parser.add_argument("--no-probe-cookies", action="store_true")
+    parser.add_argument("--probe-query", action="store_true")
     parser.add_argument("--impersonate", default="chrome")
     parser.add_argument("--insecure", action="store_true")
 
@@ -63,6 +64,7 @@ def _build_options_from_args(args: argparse.Namespace, *, force_probe: bool = Fa
         delay_seconds=getattr(args, "probe_delay", 0.0),
         max_probes=getattr(args, "max_probes", 80),
         minimize_cookies=not getattr(args, "no_probe_cookies", False),
+        minimize_query=getattr(args, "probe_query", False),
         impersonate=getattr(args, "impersonate", "chrome"),
         verify_ssl=not getattr(args, "insecure", False),
     )

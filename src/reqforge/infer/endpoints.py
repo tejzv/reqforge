@@ -55,6 +55,7 @@ NUMERIC_SEG_RE = re.compile(r"^\d+$")
 PREFIXED_ID_RE = re.compile(r"^[a-zA-Z]{2,6}[_-][a-zA-Z0-9]{4,}$")
 HIGH_ENTROPY_RE = re.compile(r"^[a-zA-Z0-9_-]{16,}$")
 VERSION_RE = re.compile(r"^v\d+$", re.IGNORECASE)
+GQL_QUERY_NAME_RE = re.compile(r"^\s*(?:query|mutation|subscription)\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
 
 
 def _split_path(path: str) -> list[str]:
@@ -81,10 +82,23 @@ def _detect_single_dynamic_segment(seg: str, idx: int) -> str | None:
 
 
 def _graphql_op_name(req: CapturedRequest) -> str | None:
-    if isinstance(req.body_json, dict) and isinstance(req.body_json.get("operationName"), str):
-        op = req.body_json["operationName"].strip()
-        if op:
-            return op
+    if isinstance(req.body_json, dict):
+        op = req.body_json.get("operationName")
+        if isinstance(op, str) and op.strip():
+            return op.strip()
+        q = req.body_json.get("query")
+        if isinstance(q, str):
+            m = GQL_QUERY_NAME_RE.match(q)
+            if m:
+                return m.group(1)
+    return None
+
+
+def _jsonrpc_method(req: CapturedRequest) -> str | None:
+    if isinstance(req.body_json, dict) and "jsonrpc" in req.body_json:
+        method = req.body_json.get("method")
+        if isinstance(method, str) and method.strip():
+            return method.strip()
     return None
 
 
@@ -144,8 +158,12 @@ def _derive_operation_id(
 ) -> str:
     gql_names = [_graphql_op_name(s) for s in samples]
     valid_gql = [g for g in gql_names if g]
+    rpc_names = [_jsonrpc_method(s) for s in samples]
+    valid_rpc = [r for r in rpc_names if r]
     if valid_gql and "graphql" in path_template.lower():
         base = f"graphql_{to_snake_case(valid_gql[0], avoid_python_kw=False)}"
+    elif valid_rpc:
+        base = f"rpc_{to_snake_case(valid_rpc[0], avoid_python_kw=False)}"
     else:
         segs = _split_path(path_template)
         meaningful: list[str] = []
@@ -376,8 +394,12 @@ def cluster_and_infer_endpoints(
     buckets: dict[tuple[str, str, int, str | None], list[CapturedRequest]] = {}
     for req in requests:
         segs = _split_path(req.path)
-        gql_op = _graphql_op_name(req) if "graphql" in req.path.lower() else None
-        key = (req.base_url(), req.method.upper(), len(segs), gql_op)
+        op_disc: str | None = None
+        if "graphql" in req.path.lower():
+            op_disc = _graphql_op_name(req)
+        elif _jsonrpc_method(req):
+            op_disc = _jsonrpc_method(req)
+        key = (req.base_url(), req.method.upper(), len(segs), op_disc)
         buckets.setdefault(key, []).append(req)
 
     clusters: list[list[CapturedRequest]] = []

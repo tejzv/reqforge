@@ -5,6 +5,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from urllib.parse import parse_qsl, urlparse
 
 from reqforge.pipeline import ForgeOptions, run_pipeline
 from reqforge.probe import ProbeConfig
@@ -24,25 +25,35 @@ class _MockTargetHandler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self) -> None:
+        parsed = urlparse(self.path)
+        path_only = parsed.path
+        qparams = dict(parse_qsl(parsed.query))
         auth = self.headers.get("Authorization", "")
         custom = self.headers.get("X-Client-Id", "")
         cookies = parse_cookie_header(self.headers.get("Cookie", ""))
 
-        if self.path == "/api/strict":
+        if path_only == "/api/strict":
             if auth != "Bearer ok_token" or custom != "visor" or cookies.get("sid") != "sess_ok":
                 self._send_json(401, {"error": "unauthorized"})
                 return
             self._send_json(200, {"status": "ok", "items": [{"id": 1, "name": "alpha"}]})
             return
 
-        if self.path == "/api/soft-block":
+        if path_only == "/api/query-filter":
+            if qparams.get("page") != "2":
+                self._send_json(400, {"error": "page required"})
+                return
+            self._send_json(200, {"page": 2, "items": ["x", "y"]})
+            return
+
+        if path_only == "/api/soft-block":
             if auth != "Bearer ok_token":
                 self._send_json(200, {"error": "missing token", "code": 401})
                 return
             self._send_json(200, {"user": {"id": 9, "plan": "pro"}, "active": True})
             return
 
-        if self.path == "/api/html-redirect":
+        if path_only == "/api/html-redirect":
             if self.headers.get("X-Api-Version") != "2":
                 html = b"<html><body>Please login</body></html>"
                 self.send_response(200)
@@ -162,3 +173,30 @@ class TestLiveProbe(unittest.TestCase):
         self.assertEqual(ep.response_model_name, "CreateEchoResponse")
         models_py = next(f.content for f in generated["python"] if f.path.endswith("models.py"))
         self.assertIn("class CreateEchoResponse", models_py)
+
+    def test_curl_cffi_probe_and_query_minimization(self) -> None:
+        curl_cmd = (
+            f"curl '{self.base_url}/api/query-filter?page=2&noise_a=1&noise_b=2&ref=nav' "
+            "-H 'User-Agent: Mozilla/5.0' "
+            "-H 'sec-ch-ua: \"Chrome\"'"
+        )
+        result, _ = run_pipeline(
+            curl_cmd,
+            options=ForgeOptions(
+                target="python",
+                probe=True,
+                probe_config=ProbeConfig(
+                    transport="curl_cffi",
+                    minimize_query=True,
+                    max_probes=50,
+                ),
+            ),
+        )
+        ep = result.endpoints[0]
+        self.assertEqual(ep.required_headers, {})
+        self.assertEqual([q.wire_name for q in ep.query_params], ["page"])
+        self.assertIsNotNone(ep.probe_report)
+        assert ep.probe_report is not None
+        self.assertEqual(ep.probe_report.transport_used, "curl_cffi")
+        self.assertEqual(ep.probe_report.required_query_params, ["page"])
+        self.assertEqual(set(ep.probe_report.removed_query_params), {"noise_a", "noise_b", "ref"})

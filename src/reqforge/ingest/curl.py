@@ -278,7 +278,7 @@ def _tokenize_posix(text: str) -> list[list[str]]:
             continue
 
         if quote == '"':
-            if ch == "\\" and i + 1 < n:
+            if ch in {"\\", "`"} and i + 1 < n:
                 nxt = text[i + 1]
                 if nxt in {'"', "\\", "$", "`"}:
                     buf.append(nxt)
@@ -303,6 +303,12 @@ def _tokenize_posix(text: str) -> list[list[str]]:
         if ch in " \t":
             flush_token()
             i += 1
+            continue
+        if ch == "#" and not has_token and not tokens:
+            nl = text.find("\n", i)
+            if nl == -1:
+                break
+            i = nl + 1
             continue
         if ch == "$" and i + 1 < n and text[i + 1] == "'":
             decoded, next_idx = _decode_ansi_c_chunk(text, i + 2)
@@ -525,7 +531,7 @@ def _parse_single_curl_tokens(tokens: list[str], idx: int) -> CapturedRequest:
 
     if form_parts:
         body_kind = "multipart"
-    elif raw_body is not None:
+    elif raw_body is not None and raw_body != "":
         body_text = raw_body
         is_json, parsed_json = try_parse_json(raw_body)
         if is_json and ("json" in content_type or not content_type):

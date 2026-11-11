@@ -185,6 +185,11 @@ def _finalize_stage(
     base_url = opts.base_url.rstrip("/") if opts.base_url else primary_base
     client_name = opts.client_name.strip() or _derive_client_name(primary_host)
 
+    if total_ingested > 0 and not endpoints:
+        warnings.append(
+            f"All {total_ingested} ingested request(s) were filtered out; adjust filter flags (--keep-static / --keep-trackers / --keep-html)"
+        )
+
     result = ForgeResult(
         base_url=base_url,
         client_name=client_name,
@@ -236,6 +241,11 @@ async def run_pipeline_async(
                 ep.dropped_headers = outcome.dropped_headers
                 ep.required_cookies = outcome.kept_cookies
                 ep.dropped_cookies = outcome.dropped_cookies
+                if outcome.dropped_query_keys:
+                    dropped_q = set(outcome.dropped_query_keys)
+                    ep.query_params = [
+                        qp for qp in ep.query_params if qp.wire_name not in dropped_q
+                    ]
                 _refresh_auth_after_probe(ep)
 
                 if outcome.report.recommended_transport == "curl_cffi" and opts.transport == "auto":

@@ -105,6 +105,7 @@ const els = {
   dropHtml: document.getElementById("opt-drop-html"),
   singleFile: document.getElementById("opt-single-file"),
   liveProbe: document.getElementById("opt-live-probe"),
+  probeQuery: document.getElementById("opt-probe-query"),
   btnForge: document.getElementById("btn-forge"),
   errorBox: document.getElementById("error-box"),
   summaryStats: document.getElementById("summary-stats"),
@@ -129,6 +130,7 @@ async function detectRuntime() {
       els.runtimeBadge.textContent = `Local Python Server (Live Probe${cffiTag})`;
       els.runtimeBadge.className = "badge badge-ok";
       els.liveProbe.disabled = false;
+      els.probeQuery.disabled = false;
       return;
     }
   } catch {
@@ -138,6 +140,8 @@ async function detectRuntime() {
   els.runtimeBadge.className = "badge badge-static";
   els.liveProbe.checked = false;
   els.liveProbe.disabled = true;
+  els.probeQuery.checked = false;
+  els.probeQuery.disabled = true;
 }
 
 async function ensurePyodideEngine() {
@@ -174,6 +178,9 @@ function collectPayload() {
     baseUrl: els.baseUrl.value.trim(),
     singleFile: els.singleFile.checked,
     probe: state.mode === "server" && els.liveProbe.checked,
+    probeConfig: {
+      minimizeQuery: state.mode === "server" && els.probeQuery.checked
+    },
     filter: {
       dropStatic: els.dropStatic.checked,
       dropTrackers: els.dropTrackers.checked,
@@ -297,13 +304,21 @@ function renderAuditTab() {
       const dropC = ep.dropped_cookies
         .map((c) => `<span class="chip chip-dropped">${escapeHtml(c)}</span>`)
         .join("");
+      const probeMeta = ep.probe_report
+        ? `<div class="meta-line">Live Probe: status ${ep.probe_report.baseline_status} &middot; ${ep.probe_report.total_probes} request(s) &middot; recommended <code>${escapeHtml(ep.probe_report.recommended_transport)}</code></div>`
+        : "";
+      const droppedQ = ep.probe_report?.removed_query_params?.length
+        ? `<div class="meta-line" style="margin-top:8px;">Stripped Query Params</div><div class="chip-row">${ep.probe_report.removed_query_params.map((q) => `<span class="chip chip-dropped">${escapeHtml(q)}</span>`).join("")}</div>`
+        : "";
       return `
         <div class="card">
           <h3>${escapeHtml(ep.operation_id)} (${escapeHtml(ep.method)} ${escapeHtml(ep.path_template)})</h3>
+          ${probeMeta}
           <div class="meta-line">Headers</div>
           <div class="chip-row">${keptH || `<span class="meta-line">None kept</span>`}${dropH}</div>
           <div class="meta-line" style="margin-top:8px;">Cookies</div>
           <div class="chip-row">${keptC || `<span class="meta-line">None kept</span>`}${dropC}</div>
+          ${droppedQ}
         </div>
       `;
     })

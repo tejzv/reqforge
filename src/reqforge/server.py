@@ -41,6 +41,7 @@ def build_forge_payload_options(body: dict[str, Any]) -> ForgeOptions:
         delay_seconds=float(probe_cfg.get("delaySeconds", 0.0)),
         max_probes=int(probe_cfg.get("maxProbes", 60)),
         minimize_cookies=bool(probe_cfg.get("minimizeCookies", True)),
+        minimize_query=bool(probe_cfg.get("minimizeQuery", False)),
     )
     return ForgeOptions(
         client_name=str(body.get("clientName", "") or ""),

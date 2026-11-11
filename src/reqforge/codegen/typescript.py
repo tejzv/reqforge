@@ -188,7 +188,13 @@ def _render_ts_method(
         lines.append('    if (!headers["Content-Type"] && !headers["content-type"]) {')
         lines.append('      headers["Content-Type"] = "application/json";')
         lines.append("    }")
-    elif ep.request_body_kind in {"form", "multipart"} and form_args:
+    elif ep.request_body_kind == "multipart" and form_args:
+        lines.append("    const body = new FormData();")
+        for p, arg_name in form_args:
+            lines.append(f"    if (form?.{arg_name} !== undefined) {{")
+            lines.append(f"      body.append({json.dumps(p.wire_name)}, String(form.{arg_name}));")
+            lines.append("    }")
+    elif ep.request_body_kind == "form" and form_args:
         lines.append("    const formParams = new URLSearchParams();")
         for p, arg_name in form_args:
             lines.append(f"    if (form?.{arg_name} !== undefined) {{")
@@ -357,7 +363,7 @@ def generate_typescript_sdk(result: ForgeResult) -> list[GeneratedFile]:
             "    url: string,",
             "    headers: Record<string, string>,",
             "    cookies: Record<string, string>,",
-            "    body?: string",
+            "    body?: string | FormData",
             "  ): Promise<T> {",
             "    const mergedHeaders = this.buildHeaders(headers, cookies);",
             "    let lastError: unknown;",
@@ -441,7 +447,8 @@ def generate_typescript_sdk(result: ForgeResult) -> list[GeneratedFile]:
             sample = p.sample_values[0] if p.sample_values else (1 if p.inferred_type == "int" else "example")
             req_args.append(json.dumps(sample))
         if ep.request_body_kind == "json":
-            req_args.append(json.dumps(ep.request_example or {}))
+            ex = ep.request_example if ep.request_example is not None else {}
+            req_args.append(json.dumps(ex))
         elif ep.request_body_kind in {"form", "multipart"} and form_args:
             has_req_form = any(p.required for p, _ in form_args)
             if has_req_form:
@@ -491,10 +498,27 @@ def generate_typescript_sdk(result: ForgeResult) -> list[GeneratedFile]:
         indent=2,
     ) + "\n"
 
+    tsconfig = json.dumps(
+        {
+            "compilerOptions": {
+                "target": "ES2022",
+                "module": "NodeNext",
+                "moduleResolution": "NodeNext",
+                "strict": True,
+                "allowImportingTsExtensions": True,
+                "noEmit": True,
+                "skipLibCheck": True,
+            },
+            "include": ["*.ts"],
+        },
+        indent=2,
+    ) + "\n"
+
     return [
         GeneratedFile(path="models.ts", content=models_code),
         GeneratedFile(path="client.ts", content=client_code),
         GeneratedFile(path="index.ts", content="\n".join(index_lines) + "\n"),
         GeneratedFile(path="smoke_test.ts", content="\n".join(smoke_lines)),
         GeneratedFile(path="package.json", content=pkg_json),
+        GeneratedFile(path="tsconfig.json", content=tsconfig),
     ]

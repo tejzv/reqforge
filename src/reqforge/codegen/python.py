@@ -16,6 +16,20 @@ from reqforge.infer.schema import collect_named_models
 from reqforge.models import EndpointGroup, ForgeResult, JsonSchemaNode, ParamSpec
 from reqforge.utils import to_pascal_case, to_snake_case
 
+PYDANTIC_RESERVED_ATTRS = {
+    "model_config",
+    "model_fields",
+    "model_computed_fields",
+    "model_extra",
+    "model_fields_set",
+    "model_dump",
+    "model_dump_json",
+    "model_validate",
+    "model_validate_json",
+    "model_rebuild",
+    "model_copy",
+}
+
 
 def _py_scalar_type(inferred_type: str) -> str:
     mapping = {
@@ -101,6 +115,7 @@ def _render_pydantic_models(result: ForgeResult) -> tuple[str, set[str]]:
         lines.append('    model_config = ConfigDict(populate_by_name=True, extra="ignore")')
         lines.append("")
         for fld in node.fields.values():
+            py_attr = f"{fld.name}_" if fld.name in PYDANTIC_RESERVED_ATTRS else fld.name
             base_type = _py_schema_type(fld.node)
             is_optional = (not fld.required) or fld.nullable
             if is_optional and base_type != "None" and not base_type.endswith("| None"):
@@ -108,21 +123,21 @@ def _render_pydantic_models(result: ForgeResult) -> tuple[str, set[str]]:
             else:
                 type_ann = base_type
 
-            needs_alias = fld.name != fld.wire_name
+            needs_alias = py_attr != fld.wire_name
             if is_optional:
                 if needs_alias:
                     lines.append(
-                        f"    {fld.name}: {type_ann} = Field(default=None, alias={json.dumps(fld.wire_name)})"
+                        f"    {py_attr}: {type_ann} = Field(default=None, alias={json.dumps(fld.wire_name)})"
                     )
                 else:
-                    lines.append(f"    {fld.name}: {type_ann} = None")
+                    lines.append(f"    {py_attr}: {type_ann} = None")
             else:
                 if needs_alias:
                     lines.append(
-                        f"    {fld.name}: {type_ann} = Field(alias={json.dumps(fld.wire_name)})"
+                        f"    {py_attr}: {type_ann} = Field(alias={json.dumps(fld.wire_name)})"
                     )
                 else:
-                    lines.append(f"    {fld.name}: {type_ann}")
+                    lines.append(f"    {py_attr}: {type_ann}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n", seen_names
@@ -208,25 +223,14 @@ def _render_endpoint_method(
     else:
         lines.append(f"    async def {ep.operation_id}({', '.join(sig_parts)}) -> {ret_type}:")
 
-    if ep.base_url != client_base_url:
-        url_prefix = json.dumps(ep.base_url)
-    else:
-        url_prefix = '""'
-
-    path_expr = ep.path_template
+    prefix_literal = ep.base_url if ep.base_url != client_base_url else ""
     if path_args:
         fmt_expr = ep.path_template
         for p, arg_name in path_args:
             fmt_expr = fmt_expr.replace(f"{{{p.name}}}", f"{{quote(str({arg_name}), safe='')}}")
-        if url_prefix == '""':
-            lines.append(f'        path = f"{fmt_expr}"')
-        else:
-            lines.append(f'        path = f"{{{url_prefix}}}{fmt_expr}"')
+        lines.append(f'        path = f"{prefix_literal}{fmt_expr}"')
     else:
-        if url_prefix == '""':
-            lines.append(f"        path = {json.dumps(path_expr)}")
-        else:
-            lines.append(f'        path = f"{{{url_prefix}}}{path_expr}"')
+        lines.append(f"        path = {json.dumps(prefix_literal + ep.path_template)}")
 
     query_auth_lines: list[str] = []
     for p in ep.query_params:
@@ -269,7 +273,13 @@ def _render_endpoint_method(
             f"        json_body = {body_arg}.model_dump(by_alias=True, exclude_none=True) if isinstance({body_arg}, BaseModel) else {body_arg}"
         )
         body_kwarg = "json_data=json_body"
-    elif ep.request_body_kind in {"form", "multipart"}:
+    elif ep.request_body_kind == "multipart":
+        lines.append("        files_data: dict[str, Any] = {}")
+        for p, arg_name in form_args:
+            lines.append(f"        if {arg_name} is not None:")
+            lines.append(f"            files_data[{json.dumps(p.wire_name)}] = (None, str({arg_name}))")
+        body_kwarg = "files_data=files_data"
+    elif ep.request_body_kind == "form":
         lines.append("        form_data: dict[str, Any] = {}")
         for p, arg_name in form_args:
             lines.append(f"        if {arg_name} is not None:")
@@ -475,7 +485,7 @@ def _render_python_client(
                     f"            val = self.{slot.param_name}"
                 )
                 lines.append(
-                    f'            if not val.lower().startswith({json.dumps(slot.prefix.lower())}):'
+                    f'            if not val.lower().startswith(("bearer ", "basic ", "token ")):'
                 )
                 lines.append(f'                val = f"{slot.prefix}{{val}}"')
                 lines.append(f"            merged[{json.dumps(slot.wire_name)}] = val")
@@ -511,6 +521,7 @@ def _render_python_client(
             "        cookies: dict[str, str] | None = None,",
             "        json_data: Any = None,",
             "        form_data: dict[str, Any] | None = None,",
+            "        files_data: dict[str, Any] | None = None,",
             "        content_data: str | None = None,",
             "    ) -> Any:",
             "        req_headers = self._build_headers(headers)",
@@ -545,6 +556,7 @@ def _render_python_client(
                 "                    cookies=req_cookies or None,",
                 "                    json=json_data,",
                 "                    data=form_data if form_data is not None else content_data,",
+                "                    files=files_data,",
                 "                    allow_redirects=True,",
                 "                )",
             ]
@@ -560,6 +572,7 @@ def _render_python_client(
                 "                    cookies=req_cookies or None,",
                 "                    json=json_data,",
                 "                    data=form_data,",
+                "                    files=files_data,",
                 "                    content=content_data,",
                 "                )",
             ]
@@ -648,7 +661,8 @@ def _render_smoke_test(result: ForgeResult, package_name: str, client_cls: str) 
                 val_expr = repr(sample)
                 call_parts.append(f"{arg_name}={val_expr}")
             if ep.request_body_kind == "json":
-                call_parts.append(f"payload={repr(ep.request_example or {})}")
+                ex = ep.request_example if ep.request_example is not None else {}
+                call_parts.append(f"payload={repr(ex)}")
             elif ep.request_body_kind in {"form", "multipart"}:
                 for p, arg_name in form_args:
                     if p.required:
@@ -658,7 +672,7 @@ def _render_smoke_test(result: ForgeResult, package_name: str, client_cls: str) 
                 call_parts.append('payload=""')
             for p, arg_name in query_args:
                 if p.required:
-                    sample = p.sample_values[0] if p.sample_values else "example"
+                    sample = p.sample_values[0] if p.sample_values else (1 if p.inferred_type == "int" else "example")
                     call_parts.append(f"{arg_name}={repr(sample)}")
 
             call_str = ", ".join(call_parts)

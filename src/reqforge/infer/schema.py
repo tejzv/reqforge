@@ -104,6 +104,7 @@ def merge_schema_nodes(a: JsonSchemaNode, b: JsonSchemaNode) -> JsonSchemaNode:
             )
         if a.kind == "object":
             merged_fields: dict[str, SchemaField] = {}
+            used_field_names: set[str] = set()
             all_keys = list(a.fields.keys())
             for k in b.fields:
                 if k not in a.fields:
@@ -115,8 +116,12 @@ def merge_schema_nodes(a: JsonSchemaNode, b: JsonSchemaNode) -> JsonSchemaNode:
                     merged_child = merge_schema_nodes(fa.node, fb.node)
                     nullable = fa.nullable or fb.nullable or _node_allows_null(merged_child)
                     clean_child = _strip_null_from_union(merged_child) if nullable else merged_child
+                    fname = fa.name
+                    while fname in used_field_names:
+                        fname = f"{fname}_"
+                    used_field_names.add(fname)
                     merged_fields[wire_name] = SchemaField(
-                        name=fa.name,
+                        name=fname,
                         wire_name=wire_name,
                         node=clean_child,
                         required=fa.required and fb.required,
@@ -126,8 +131,12 @@ def merge_schema_nodes(a: JsonSchemaNode, b: JsonSchemaNode) -> JsonSchemaNode:
                     existing = fa if fa is not None else fb
                     assert existing is not None
                     nullable = existing.nullable or existing.node.kind == "null"
+                    fname = existing.name
+                    while fname in used_field_names:
+                        fname = f"{fname}_"
+                    used_field_names.add(fname)
                     merged_fields[wire_name] = SchemaField(
-                        name=existing.name,
+                        name=fname,
                         wire_name=wire_name,
                         node=existing.node,
                         required=False,
